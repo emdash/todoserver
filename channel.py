@@ -100,6 +100,7 @@ class ChannelDispatcher(SockJSConnection):
         self.authenticated = True
 
     def doChannelJoin(self, name):
+        print self.channels
         self.channels[name].join(self)
         self.joined.add(self.channels[name])
 
