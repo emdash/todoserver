@@ -44,10 +44,14 @@ class Server(object):
         Router = SockJSRouter(ChannelDispatcher, '/todo')
         self.app = web.Application(Router.urls)
 
-        self.lists = [List("Foo"), List("bar")]
         self.control = Channel("control")
         self.control.onMessage = self.controlMessageHandler
-        ChannelDispatcher.addChannel("control", self.control)
+        ChannelDispatcher.addChannel(self.control)
+
+        self.lists = []
+
+        for list in "Foo", "Bar":
+            self.createList(list)
 
     def controlMessageHandler(self, channel, socket, msg):
         if msg.type == "get-lists":
@@ -57,6 +61,15 @@ class Server(object):
                     {"type": "list-added",
                      "name": list.name,
                      "id": list.id})
+
+    def createList(self, name):
+        l = List(name)
+        self.lists.append(l)
+        ChannelDispatcher.addChannel(l.channel)
+        self.control.broadcast(
+            {"type": "list-added",
+             "name": name,
+             "id": l.id})
 
     def run(self):
         self.app.listen(8080)

@@ -100,12 +100,10 @@ class ChannelDispatcher(SockJSConnection):
         self.authenticated = True
 
     def doChannelJoin(self, name):
-        print self.channels
         self.channels[name].join(self)
         self.joined.add(self.channels[name])
 
     def doChannelLeave(self, name):
-        print self.channels
         self.channels[name].leave(self)
         self.joined.remove(self.channels[name])
 
@@ -113,8 +111,8 @@ class ChannelDispatcher(SockJSConnection):
         self.channels[channel].send(self, msg)
 
     @classmethod
-    def addChannel(self, name, channel):
-        self.channels[name] = channel
+    def addChannel(self, channel):
+        self.channels[channel.name] = channel
 
     @classmethod
     def destroyChannel(self, name):
