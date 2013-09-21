@@ -26,7 +26,10 @@ class List(object):
                  "attrs": item})
 
     def onMessage(self, socket, msg):
+        require(msg, "index")
+
         if msg.type == "insert":
+            require(msg, "attrs")
             self.items.insert(msg.index, msg.attrs)
             self.channel.broadcast(
                 {"type": "insert",
@@ -38,6 +41,7 @@ class List(object):
                 {"type": "delete",
                  "index": msg.index})
         elif msg.type == "update":
+            require(msg, "attrs")
             item = self.items[msg.index]
             item.update(msg.attrs)
             self.channel.broadcast(

@@ -15,6 +15,9 @@ def failUnless(condition, msg=None, hard=False):
         if not condition:
             raise SoftFailure(msg)
 
+def require(msg, attr):
+    failUnless(hasattr(msg, attr), "Required attribute %r missing" % attr)
+
 
 class Msg(object):
 
