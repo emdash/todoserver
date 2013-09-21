@@ -4,14 +4,15 @@ from tornado import web, ioloop
 from sockjs.tornado import SockJSRouter
 from channel import Channel, ChannelDispatcher
 from uuid import uuid4
-from util import HardFailure, SoftFailure, failUnless, Msg
+from util import HardFailure, SoftFailure, failUnless, Msg, require
 import json
+import os
 
 
 class List(object):
 
-    def __init__(self, name):
-        self.id = str(uuid4())
+    def __init__(self, name, id=None):
+        self.id = id if id else str(uuid4())
         self.channel = Channel(self.id)
         self.channel.onMessage = self.onMessage
         self.channel.onJoin = self.onJoin
@@ -61,6 +62,7 @@ class Server(object):
         ChannelDispatcher.addChannel(self.control)
 
         self.lists = []
+        self.byId = {}
         self.init()
 
     def controlMessageHandler(self, socket, msg):
@@ -72,12 +74,14 @@ class Server(object):
                      "name": list.name,
                      "id": list.id})
         elif msg.type == "create":
+            require(msg, "name")
             self.createList(msg.name)
         
 
-    def createList(self, name):
-        l = List(name)
+    def createList(self, name, id=None):
+        l = List(name, id)
         self.lists.append(l)
+        self.byId[l.id] = l
         ChannelDispatcher.addChannel(l.channel)
         self.control.broadcast(
             {"type": "list-added",
@@ -88,18 +92,20 @@ class Server(object):
         output = []
         for list in self.lists:
             output.append({"name": list.name,
+                           "id": list.id,
                            "items": list.items})
         json.dump(output, open("data.txt", "w"))
 
     def init(self):
-        try:
-            data = json.load(open("data.txt", "r"))
-            for l in data:
-                self.createList(l["name"])
-                for item in l["items"]:
-                    l.insert(-1, item)
-        except:
-            pass
+        if not os.path.exists("data.txt"):
+            return
+
+        data = json.load(open("data.txt", "r"))
+        for l in data:
+            self.createList(l["name"], l["id"])
+            lst = self.byId[l["id"]]
+            for item in l["items"]:
+                lst.items.append(item)
 
     def run(self):
         self.app.listen(8080)
