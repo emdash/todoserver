@@ -13,19 +13,27 @@ class List(object):
     def __init__(self, name):
         self.id = str(uuid4())
         self.channel = Channel(self.id)
-        self.channel.on_message = self.onMessage
+        self.channel.onMessage = self.onMessage
+        self.channel.onJoin = self.onJoin
         self.name = name
         self.items = []
 
+    def onJoin(self, socket):
+        for i, item in enumerate(self.items):
+            self.channel.sendTo(socket,
+                {"type": "insert",
+                 "index": i,
+                 "attrs": item})
+
     def onMessage(self, socket, msg):
         if msg.type == "insert":
-            items.insert(msg.index, msg.attrs)
+            self.items.insert(msg.index, msg.attrs)
             self.channel.broadcast(
                 {"type": "insert",
                  "index": msg.index,
                  "attrs": msg.attrs})
         elif msg.type == "delete":
-            del items[msg.index]
+            del self.items[msg.index]
             self.channel.broadcast(
                 {"type": "delete",
                  "index": msg.index})
@@ -49,18 +57,19 @@ class Server(object):
         ChannelDispatcher.addChannel(self.control)
 
         self.lists = []
+        self.init()
 
-        for list in "Foo", "Bar":
-            self.createList(list)
-
-    def controlMessageHandler(self, channel, socket, msg):
+    def controlMessageHandler(self, socket, msg):
         if msg.type == "get-lists":
             for list in self.lists:
-                channel.sendTo(
+                self.control.sendTo(
                     socket,
                     {"type": "list-added",
                      "name": list.name,
                      "id": list.id})
+        elif msg.type == "create":
+            self.createList(msg.name)
+        
 
     def createList(self, name):
         l = List(name)
@@ -71,9 +80,29 @@ class Server(object):
              "name": name,
              "id": l.id})
 
+    def flush(self):
+        output = []
+        for list in self.lists:
+            output.append({"name": list.name,
+                           "items": list.items})
+        json.dump(output, open("data.txt", "w"))
+
+    def init(self):
+        try:
+            data = json.load(open("data.txt", "r"))
+            for l in data:
+                self.createList(l["name"])
+                for item in l["items"]:
+                    l.insert(-1, item)
+        except:
+            pass
+
     def run(self):
         self.app.listen(8080)
+        flusher = ioloop.PeriodicCallback(self.flush, 5000)
+        flusher.start()
         ioloop.IOLoop.instance().start()
+
 
 
 s = Server()

@@ -14,6 +14,7 @@ class Channel(object):
 
     def join(self, socket):
         self.subscribers.add(socket)
+        self.onJoin(socket)
 
     def leave(self, socket):
         self.subscribers.remove(socket)
@@ -29,7 +30,7 @@ class Channel(object):
                  "content": msg}))
 
     def send(self, socket, msg):
-        self.onMessage(self, socket, msg)
+        self.onMessage(socket, msg)
 
     def onMessage(self, socket, message):
         pass
@@ -83,7 +84,6 @@ class ChannelDispatcher(SockJSConnection):
         if msg.type == "login":
             self.doLogin(msg)
         elif msg.type == "join":
-            self.failUnlessAuthenticated()
             self.failIfInvalidChannel(msg.name)
             self.doChannelJoin(msg.name)
         elif msg.type == "leave":
@@ -94,7 +94,8 @@ class ChannelDispatcher(SockJSConnection):
             self.doChannelSend(msg.name, Msg(**msg.content))
 
     def doLogin(self, msg):
-        failUnless(msg.user == "dotsony" and msg.password == "foobar", "Access Denied.")
+        failUnless((msg.user == "dotsony") and (msg.password == "foobar"),
+                   "Access Denied.")
         self.send(json.dumps({"type": "login",
                               "status": "ok"}))
         self.authenticated = True

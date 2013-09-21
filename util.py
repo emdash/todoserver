@@ -7,7 +7,7 @@ class HardFailure(Exception): pass
 class SoftFailure(Exception): pass
 
 
-def failUnless(self, condition, msg=None, hard=False):
+def failUnless(condition, msg=None, hard=False):
     if hard:
         if not condition:
             raise HardFailure(msg)
