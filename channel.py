@@ -117,7 +117,9 @@ class ChannelDispatcher(SockJSConnection):
 
     @classmethod
     def destroyChannel(self, name):
-        subscribers = set(self.channels[name].subscribers)
+        channel = self.channels[name]
+        channel.broadcast({"type": "destroy"})
+        subscribers = set(channel.subscribers)
         for subscriber in subscribers:
-            subscribers.doChannelLeave(name)
+            subscriber.doChannelLeave(name)
         del self.channels[name]

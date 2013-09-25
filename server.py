@@ -76,7 +76,16 @@ class Server(object):
         elif msg.type == "create":
             require(msg, "name")
             self.createList(msg.name)
-        
+        elif msg.type == "rename":
+            require(msg, "id")
+            require(msg, "name")
+            self.byId[msg.id].name = msg.name
+            self.control.broadcast({"type": "list-rename",
+                                    "id": msg.id,
+                                    "name": msg.name})
+        elif msg.type == "delete":
+            require(msg, "id")
+            self.deleteList(msg.id)
 
     def createList(self, name, id=None):
         l = List(name, id)
@@ -87,6 +96,12 @@ class Server(object):
             {"type": "list-added",
              "name": name,
              "id": l.id})
+
+    def deleteList(self, id):
+        self.lists.remove(self.byId.pop(id))
+        ChannelDispatcher.destroyChannel(id)
+        self.control.broadcast({"type": "list-delete",
+                                "id": id})
 
     def flush(self):
         output = []
@@ -112,7 +127,6 @@ class Server(object):
         flusher = ioloop.PeriodicCallback(self.flush, 5000)
         flusher.start()
         ioloop.IOLoop.instance().start()
-
 
 
 s = Server()
