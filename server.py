@@ -123,7 +123,7 @@ class Server(object):
                 lst.items.append(item)
 
     def run(self):
-        self.app.listen(8080)
+        self.app.listen(8000)
         flusher = ioloop.PeriodicCallback(self.flush, 5000)
         flusher.start()
         ioloop.IOLoop.instance().start()
