@@ -4,9 +4,16 @@ from tornado import web, ioloop
 from sockjs.tornado import SockJSRouter
 from channel import Channel, ChannelDispatcher
 from uuid import uuid4
-from util import HardFailure, SoftFailure, failUnless, Msg, require
+from util import \
+    HardFailure, \
+    SoftFailure, \
+    failUnless, \
+    Msg, \
+    rename, \
+    require
 import json
 import os
+import time
 
 
 class List(object):
@@ -18,6 +25,7 @@ class List(object):
         self.channel.onJoin = self.onJoin
         self.name = name
         self.items = []
+        self.dirty = False
 
     def onJoin(self, socket):
         for i, item in enumerate(self.items):
@@ -36,11 +44,15 @@ class List(object):
                 {"type": "insert",
                  "index": msg.index,
                  "attrs": msg.attrs})
+            self.dirty = True
+
         elif msg.type == "delete":
             del self.items[msg.index]
             self.channel.broadcast(
                 {"type": "delete",
                  "index": msg.index})
+            self.dirty = True
+
         elif msg.type == "update":
             require(msg, "attrs")
             item = self.items[msg.index]
@@ -49,6 +61,7 @@ class List(object):
                 {"type": "update",
                  "index": msg.index,
                  "attrs": msg.attrs})
+            self.dirty = True
 
 
 class Server(object):
@@ -64,6 +77,7 @@ class Server(object):
         self.lists = []
         self.byId = {}
         self.init()
+        self.dirty = True
 
     def controlMessageHandler(self, socket, msg):
         if msg.type == "get-lists":
@@ -76,6 +90,7 @@ class Server(object):
         elif msg.type == "create":
             require(msg, "name")
             self.createList(msg.name)
+            self.dirty = True
         elif msg.type == "rename":
             require(msg, "id")
             require(msg, "name")
@@ -83,9 +98,11 @@ class Server(object):
             self.control.broadcast({"type": "list-rename",
                                     "id": msg.id,
                                     "name": msg.name})
+            self.dirty = True
         elif msg.type == "delete":
             require(msg, "id")
             self.deleteList(msg.id)
+            self.dirty = True
 
     def createList(self, name, id=None):
         l = List(name, id)
@@ -104,12 +121,25 @@ class Server(object):
                                 "id": id})
 
     def flush(self):
-        output = []
-        for list in self.lists:
-            output.append({"name": list.name,
-                           "id": list.id,
-                           "items": list.items})
-        json.dump(output, open("data.txt", "w"))
+        if self.isDirty():
+            print "syncdb"
+            output = []
+            for list in self.lists:
+                output.append({"name": list.name,
+                               "id": list.id,
+                               "items": list.items})
+            json.dump(output, open("temp.txt", "w"))
+            rename("data.txt", "backup/%d.txt" % int(time.time()))
+            rename("temp.txt", "data.txt")
+            self.clearDirty()
+
+    def clearDirty(self):
+        for l in self.lists:
+            l.dirty = False
+        self.dirty = False
+
+    def isDirty(self):
+        return self.dirty or any((l.dirty for l in self.lists))
 
     def init(self):
         if not os.path.exists("data.txt"):

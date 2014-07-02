@@ -1,5 +1,6 @@
 ## Commmon Code
 import json
+import os
 
 class HardFailure(Exception): pass
 
@@ -29,3 +30,8 @@ class Msg(object):
     @classmethod
     def fromJSON(self, string):
         return Msg(**json.loads(string))
+
+
+def rename(old, new):
+    if os.path.exists(old):
+        os.rename(old, new)

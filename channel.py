@@ -4,6 +4,7 @@
 from sockjs.tornado import SockJSConnection
 from util import HardFailure, SoftFailure, failUnless, Msg
 import json
+import time
 
 
 class Channel(object):
@@ -45,7 +46,9 @@ class Channel(object):
 class ChannelDispatcher(SockJSConnection):
 
     authenticated = False
+    attempts = 0
     channels = {}
+    lasttry = 0
 
     def on_open(self, something):
         self.joined = set()
@@ -94,10 +97,18 @@ class ChannelDispatcher(SockJSConnection):
             self.doChannelSend(msg.name, Msg(**msg.content))
 
     def doLogin(self, msg):
-        failUnless((msg.user == "dotsony") and (msg.password == "foobar"),
+        self.attempts += 1
+        interval = time.time() - self.lasttry
+        self.lasttry = time.time()
+
+        failUnless(self.attempts < 5, "Too many attempts." )
+        failUnless((msg.user == "dotsony") and (msg.password == "l0ld0ngs"),
                    "Access Denied.")
+        failUnless(interval > 2, "Minimum retry interval not expired.")
+
         self.send(json.dumps({"type": "login",
                               "status": "ok"}))
+        self.attempts = 0
         self.authenticated = True
 
     def doChannelJoin(self, name):
