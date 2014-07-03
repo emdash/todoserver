@@ -52,6 +52,12 @@ class List(object):
         self.items = []
         self.dirty = False
 
+    def entitle(self, user):
+        self.channel.entitle(user)
+
+    def entitled(self, user):
+        return user in self.channel.entitled
+
     def onJoin(self, socket):
         for i, item in enumerate(self.items):
             self.channel.sendTo(socket,
@@ -107,6 +113,9 @@ class Server(object):
     def controlMessageHandler(self, socket, msg):
         if msg.type == "get-lists":
             for list in self.lists:
+                if not list.entitled(socket.username):
+                    continue
+
                 self.control.sendTo(
                     socket,
                     {"type": "list-added",
@@ -114,7 +123,7 @@ class Server(object):
                      "id": list.id})
         elif msg.type == "create":
             require(msg, "name")
-            self.createList(msg.name)
+            self.createList(msg.name, None, socket.username)
             self.dirty = True
         elif msg.type == "rename":
             require(msg, "id")
@@ -129,11 +138,11 @@ class Server(object):
             self.deleteList(msg.id)
             self.dirty = True
 
-    def createList(self, name, id=None):
+    def createList(self, name, id=None, username=None):
         l = List(name, id)
         self.lists.append(l)
         self.byId[l.id] = l
-        ChannelDispatcher.addChannel(l.channel)
+        ChannelDispatcher.addChannel(l.channel, username)
         self.control.broadcast(
             {"type": "list-added",
              "name": name,
@@ -149,10 +158,11 @@ class Server(object):
         if self.isDirty():
             print "syncdb"
             output = []
-            for list in self.lists:
-                output.append({"name": list.name,
-                               "id": list.id,
-                               "items": list.items})
+            for l in self.lists:
+                output.append({"name": l.name,
+                               "id": l.id,
+                               "items": l.items,
+                               "users": list(l.channel.entitled)})
             json.dump(output, open("temp.txt", "w"))
             rename("data.txt", "backup/%d.txt" % int(time.time()))
             rename("temp.txt", "data.txt")
@@ -167,6 +177,13 @@ class Server(object):
         return self.dirty or any((l.dirty for l in self.lists))
 
     def init(self):
+        creds = json.load(open("credentials.txt", "r"))
+        for user in creds:
+            ChannelDispatcher.addUser(
+                user["username"],
+                user["pwhash"])
+            self.control.entitle(user["username"])
+
         if not os.path.exists("data.txt"):
             return
 
@@ -176,6 +193,9 @@ class Server(object):
             lst = self.byId[l["id"]]
             for item in l["items"]:
                 lst.items.append(item)
+            for user in l["users"]:
+                lst.entitle(user)
+
 
     def run(self):
         self.app.listen(8000)

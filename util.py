@@ -40,6 +40,7 @@ def failUnless(condition, msg=None, hard=False):
         if not condition:
             raise SoftFailure(msg)
 
+
 def require(msg, attr):
     failUnless(hasattr(msg, attr), "Required attribute %r missing" % attr)
 
@@ -59,3 +60,13 @@ class Msg(object):
 def rename(old, new):
     if os.path.exists(old):
         os.rename(old, new)
+
+def failUnlessRaises(func, exc):
+    raised = False
+
+    try:
+        func()
+    except exc:
+        raised = True
+    finally:
+        assert raised

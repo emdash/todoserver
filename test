@@ -1,0 +1,6 @@
+# Run the unit tests
+python auth.py
+python channel.py
+
+# integration tests to follow
+

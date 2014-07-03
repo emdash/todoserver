@@ -23,22 +23,37 @@
 # SOFTWARE.
 
 from sockjs.tornado import SockJSConnection
-from util import HardFailure, SoftFailure, failUnless, Msg
+from util import \
+    HardFailure, \
+    SoftFailure, \
+    failUnless, \
+    failUnlessRaises, \
+    Msg
 import json
 import time
+import auth
 
 
 class Channel(object):
 
     '''One-way pub/sub channel. Sending a message to a channel will
     broadcast the message to all subscribing sockets which have joined
-    the channel. Authentication is currently a joke.'''
+    the channel.'''
 
     def __init__(self, name):
         self.subscribers = set()
         self.name = name
+        self.entitled = set([])
+
+    def entitle(self, user):
+        self.entitled.add(user)
+
+    def revoke(self, user):
+        self.entitled.remove(user)
 
     def join(self, socket):
+        failUnless(socket.username in self.entitled,
+                   "You are not allowed to join this channel.")
         self.subscribers.add(socket)
         self.onJoin(socket)
 
@@ -83,6 +98,8 @@ class ChannelDispatcher(SockJSConnection):
     ''' 
 
     authenticated = False
+    username = None
+    auth = auth.PasswordAuthentication()
     attempts = 0
     channels = {}
     lasttry = 0
@@ -138,16 +155,15 @@ class ChannelDispatcher(SockJSConnection):
         interval = time.time() - self.lasttry
         self.lasttry = time.time()
 
-        ## FIXME: this is not authentication. this is a joke. There
-        ## needs to be some kind of channel access control mechanism.
         failUnless(self.attempts < 5, "Too many attempts." )
-        failUnless((msg.user == "dotsony") and (msg.password == "l0ld0ngs"),
+        failUnless(self.auth.authUser(msg.user, msg.password),
                    "Access Denied.")
         failUnless(interval > 2, "Minimum retry interval not expired.")
 
         self.send(json.dumps({"type": "login",
                               "status": "ok"}))
         self.attempts = 0
+        self.username = msg.user
         self.authenticated = True
 
     def doChannelJoin(self, name):
@@ -162,8 +178,12 @@ class ChannelDispatcher(SockJSConnection):
         self.channels[channel].send(self, msg)
 
     @classmethod
-    def addChannel(self, channel):
+    def addChannel(self, channel, user = None):
         self.channels[channel.name] = channel
+
+        # by default, entitle the user who created the channel
+        if user:
+            channel.entitle(user)
 
     @classmethod
     def destroyChannel(self, name):
@@ -173,3 +193,68 @@ class ChannelDispatcher(SockJSConnection):
         for subscriber in subscribers:
             subscriber.doChannelLeave(name)
         del self.channels[name]
+
+    @classmethod
+    def addUser(self, user, pwhash):
+        self.auth.addUser(user, pwhash)
+
+
+if __name__ == "__main__":
+
+    class SocketMock(ChannelDispatcher):
+
+        def __init__(self, user):
+            self.username = user
+            self.last = None
+            self.left = False
+
+        def send(self, msg):
+            self.last = msg
+
+        def doChannelLeave(self, name):
+            self.left = name
+
+    # setup
+    channel = Channel("foochan")
+    channel.entitle("foouser")
+    s1 = SocketMock("foouser")
+    s2 = SocketMock("foouser")
+    s3 = SocketMock("unknownuser")
+
+    # test that entitled users may join
+    channel.join(s1)
+    channel.join(s2)
+
+    # test that unentitled users may not join
+    failUnlessRaises(lambda: channel.join(s3), SoftFailure)
+
+    # test broadcast
+    channel.broadcast({"type": "foo"})
+    assert json.loads(s1.last) == json.loads(s2.last) == {
+        "type": "channel-message",
+        "name": "foochan",
+        "content": {"type": "foo"},
+    }
+
+    # disconnect one socket. make sure broadcast does not send to it.
+    channel.leave(s1)
+    channel.broadcast({"type": "bar"})
+    assert json.loads(s1.last) == {
+        "type": "channel-message",
+        "name": "foochan",
+        "content": {"type": "foo"}
+    }
+    assert json.loads(s2.last) == {
+        "type": "channel-message",
+        "name": "foochan",
+        "content": {"type": "bar"}
+    }
+
+    # test dispatcher
+    ChannelDispatcher.addChannel(channel)
+    ChannelDispatcher.addUser("foo", "foobar")
+    ChannelDispatcher.addUser("bar", "foobar")
+
+    ChannelDispatcher.destroyChannel("foochan")
+    assert s2.left == "foochan"
+
