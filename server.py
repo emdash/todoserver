@@ -35,11 +35,21 @@ from util import \
     failUnless, \
     Msg, \
     rename, \
-    require
+    require,\
+    requireEnv
+
 import json
 import os
 import time
 
+PORT = int(requireEnv("TODO_PORT"))
+FLUSH_INTERVAL = int(requireEnv("TODO_FLUSH_INTERVAL"))
+DATA_PATH = requireEnv("TODO_DATA_PATH")
+BACKUP_PATH = requireEnv("TODO_BACKUP_PATH")
+assert os.path.exists(BACKUP_PATH)
+assert os.path.isdir(BACKUP_PATH)
+CREDENTIALS_PATH = requireEnv("TODO_CREDENTIALS_PATH")
+TEMP_PATH = requireEnv("TODO_TEMP_PATH")
 
 class List(object):
 
@@ -163,9 +173,9 @@ class Server(object):
                                "id": l.id,
                                "items": l.items,
                                "users": list(l.channel.entitled)})
-            json.dump(output, open("temp.txt", "w"))
-            rename("data.txt", "backup/%d.txt" % int(time.time()))
-            rename("temp.txt", "data.txt")
+            json.dump(output, open(TEMP_PATH, "w"))
+            rename(DATA_PATH, "%s/%d.txt" % (BACKUP_PATH, int(time.time())))
+            rename(TEMP_PATH, DATA_PATH)
             self.clearDirty()
 
     def clearDirty(self):
@@ -177,17 +187,17 @@ class Server(object):
         return self.dirty or any((l.dirty for l in self.lists))
 
     def init(self):
-        creds = json.load(open("credentials.txt", "r"))
+        creds = json.load(open(CREDENTIALS_PATH, "r"))
         for user in creds:
             ChannelDispatcher.addUser(
                 user["username"],
                 user["pwhash"])
             self.control.entitle(user["username"])
 
-        if not os.path.exists("data.txt"):
+        if not os.path.exists(DATA_PATH):
             return
 
-        data = json.load(open("data.txt", "r"))
+        data = json.load(open(DATA_PATH, "r"))
         for l in data:
             self.createList(l["name"], l["id"])
             lst = self.byId[l["id"]]
@@ -198,8 +208,8 @@ class Server(object):
 
 
     def run(self):
-        self.app.listen(8000)
-        flusher = ioloop.PeriodicCallback(self.flush, 5000)
+        self.app.listen(PORT)
+        flusher = ioloop.PeriodicCallback(self.flush, FLUSH_INTERVAL)
         flusher.start()
         ioloop.IOLoop.instance().start()
 
