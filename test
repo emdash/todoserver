@@ -2,5 +2,20 @@
 python auth.py
 python channel.py
 
-# integration tests to follow
+# start integration tests
+rm -rf testdir
+mkdir -p testdir/backup
+cp tests/data.txt testdir/data.txt
+TODO_DATA_PATH=testdir/data.txt \
+TODO_BACKUP_PATH=testdir/backup \
+TODO_TEMP_PATH=testdir/temp.txt \
+TODO_FLUSH_INTERVAL=5000 \
+TODO_PORT=8001 \
+./server.py &
 
+SERVERPID=$!
+
+./tests/client.py
+
+kill $SERVERPID
+rm -rf testdir

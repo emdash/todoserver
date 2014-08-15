@@ -70,3 +70,9 @@ def failUnlessRaises(func, exc):
         raised = True
     finally:
         assert raised
+
+def requireEnv(var):
+    failUnless(var in os.environ,
+               "Please define the %r environment variable" % var,
+               True)
+    return os.environ[var]
